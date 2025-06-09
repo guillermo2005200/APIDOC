@@ -1,30 +1,65 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 const vscode = require('vscode');
-
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-
+const llamarGemini = require('./gemini');
 /**
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
+  let disposable = vscode.commands.registerCommand('apidoc.leerarchivo', async () => {
+    // 1. Buscar archivos del proyecto
+    const files = await vscode.workspace.findFiles('**/*');
+    if (files.length === 0) {
+      vscode.window.showWarningMessage('No se encontraron archivos en el proyecto.');
+      return;
+    }
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "apidoc" is now active!');
+    // 2. QuickPick para seleccionar
+    const items = files.map(f => ({
+      label: vscode.workspace.asRelativePath(f),
+      uri: f
+    }));
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with  registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('apidoc.helloWorld', function () {
-		// The code you place here will be executed every time your command is executed
+    const seleccionado = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Selecciona un archivo del proyecto'
+    });
 
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from APIDOC!');
-	});
+    let content = '';
+    if (seleccionado) {
+      // 3. Leer el contenido
+      const fileData = await vscode.workspace.fs.readFile(seleccionado.uri);
+      content = Buffer.from(fileData).toString('utf8');
+    } else {
+      vscode.window.showWarningMessage('No seleccionaste ningún archivo.');
+      return;
+    }
 
-	context.subscriptions.push(disposable);
+    // 4. Llamada a Gemini
+    const resultado = await llamarGemini(content);
+
+    if (resultado) {
+      // 5. Mostrar el resultado en un Webview
+      const panel = vscode.window.createWebviewPanel(
+        'apidocResult',
+        'Resultado de Gemini',
+        vscode.ViewColumn.One,
+        {}
+      );
+      panel.webview.html = `<html><body><pre>${resultado}</pre></body></html>`;
+
+      // 6. Guardar el resultado en un archivo .txt en la raíz del workspace
+      if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        const folderUri = vscode.workspace.workspaceFolders[0].uri;
+        const fileUri = vscode.Uri.joinPath(folderUri, 'resultado-gemini.txt');
+        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(resultado, 'utf8'));
+        vscode.window.showInformationMessage('Resultado guardado en resultado-gemini.txt');
+      } else {
+        vscode.window.showWarningMessage('No se encontró la carpeta del workspace para guardar el archivo.');
+      }
+    } else {
+      vscode.window.showErrorMessage('No se pudo obtener una respuesta de Gemini.');
+    }
+  });
+
+  context.subscriptions.push(disposable);
 }
 
 // This method is called when your extension is deactivated
