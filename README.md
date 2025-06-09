@@ -2,8 +2,6 @@
 
 **Genera documentación de endpoints fácilmente con IA (Gemini) desde VS Code.**
 
-![Logo](logo.png)
-
 ---
 
 ## ✨ ¿Qué es AIDoc?
